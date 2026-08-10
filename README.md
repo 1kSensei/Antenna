@@ -38,6 +38,10 @@ Antenna has no backend and no build process. Options, easiest first:
 3. **Deploy it anywhere that serves static files** — GitHub Pages, Netlify,
    Vercel, Cloudflare Pages, an S3 bucket, whatever you've got. It's just HTML/CSS/JS.
 
+## OR
+
+Go to the github pages version in deployments!
+
 ## How it works
 
 - Channel and stream data comes from the public playlists at
