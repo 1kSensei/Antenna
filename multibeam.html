@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Antenna — Public Signal Browser</title>
-<meta name="description" content="Browse and watch thousands of free, publicly listed live TV channels from the iptv-org/iptv project.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230A0D12'/%3E%3Cpath d='M12 20V10M12 10L6 4M12 10l6-6M4 8a11 11 0 0 1 16 0' stroke='%23FFB020' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='20' r='1.4' fill='%23FF4136'/%3E%3C/svg%3E">
+<title>MultiBeam — 4-Channel Live Wall (fork of Antenna)</title>
+<meta name="description" content="Watch up to four free, publicly listed live TV channels at once from the iptv-org/iptv project. A multi-view fork of Antenna.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230A0D12'/%3E%3Crect x='4' y='4' width='7' height='7' rx='1.4' fill='none' stroke='%23FFB020' stroke-width='1.6'/%3E%3Crect x='13' y='4' width='7' height='7' rx='1.4' fill='none' stroke='%23FFB020' stroke-width='1.6'/%3E%3Crect x='4' y='13' width='7' height='7' rx='1.4' fill='none' stroke='%23FFB020' stroke-width='1.6'/%3E%3Crect x='13' y='13' width='7' height='7' rx='1.4' fill='none' stroke='%23FF4136' stroke-width='1.6'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -50,8 +50,10 @@
   ::-webkit-scrollbar-track{background:transparent;}
   ::-webkit-scrollbar-thumb{background:var(--panel-hi2);border-radius:8px;border:2px solid var(--void);}
 
-  /* Defensive: make sure `hidden` always wins over any component's own
-     `display` rule, even if one gets added later. */
+  /* Several components below set their own `display` (flex/grid/etc) on
+     elements that are also toggled via the `hidden` attribute in JS. Author
+     CSS normally overrides the browser's built-in `[hidden]{display:none}`
+     rule, which would silently break hiding — this makes `hidden` always win. */
   [hidden]{display:none !important;}
 
   .app{max-width:1240px;margin:0 auto;padding:0 20px;}
@@ -95,12 +97,6 @@
   .ghost-btn:hover{border-color:var(--amber-dim);color:var(--amber);}
   .ghost-btn.on{background:var(--amber);border-color:var(--amber);color:#1a1200;font-weight:600;}
   .ghost-btn:disabled{opacity:.5;cursor:default;}
-  .beam-btn{
-    display:inline-flex;align-items:center;gap:6px;text-decoration:none;
-    border-color:var(--amber-dim);
-  }
-  .beam-btn svg{width:12px;height:12px;flex-shrink:0;}
-  .beam-btn:hover{background:rgba(255,176,32,.08);}
 
   /* ---------- Scope tabs ---------- */
   .scope-tabs{
@@ -231,52 +227,72 @@
   .spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--amber);animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  /* ---------- Player overlay ---------- */
-  .player-overlay{
-    position:fixed;inset:0;background:rgba(6,8,11,.88);backdrop-filter:blur(6px);
-    z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;
+  /* ---------- Video wall ---------- */
+  .wall{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;
   }
-  .player-overlay[hidden]{display:none;}
-  .tv{
-    width:100%;max-width:920px;background:var(--panel);border:1px solid var(--line);
-    border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55);
+  .slot{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);
+    overflow:hidden;transition:border-color .15s;position:relative;
   }
-  .tv.flicker{animation:flicker .18s;}
+  .slot.is-target{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber);}
+  .slot.flicker{animation:flicker .18s;}
   @keyframes flicker{0%{opacity:.4;}100%{opacity:1;}}
-  .tv-strip{
-    display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);
+  .slot-strip{
+    display:flex;align-items:center;gap:9px;padding:10px 11px;border-bottom:1px solid var(--line);
   }
-  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--onair);flex-shrink:0;box-shadow:0 0 0 3px rgba(255,65,54,.18);animation:pulse 1.8s ease-in-out infinite;}
+  .slot-num{
+    font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--dimmer);
+    background:var(--void);border:1px solid var(--line);border-radius:5px;padding:2px 6px;flex-shrink:0;
+  }
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--onair);flex-shrink:0;box-shadow:0 0 0 3px rgba(255,65,54,.18);animation:pulse 1.8s ease-in-out infinite;}
+  .live-dot.idle{background:var(--dimmer);box-shadow:none;animation:none;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
-  .tv-info{flex:1;min-width:0;}
-  .tv-name{font-family:var(--font-display);font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .tv-sub{font-family:var(--font-mono);font-size:10.5px;color:var(--dim);letter-spacing:.04em;text-transform:uppercase;margin-top:2px;display:flex;gap:8px;}
-  .qsel{
-    background:var(--void);border:1px solid var(--line);color:var(--paper);border-radius:6px;
-    font-size:11.5px;padding:6px 8px;font-family:var(--font-mono);
+  .slot-info{flex:1;min-width:0;}
+  .slot-name{font-family:var(--font-display);font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .slot-sub{font-family:var(--font-mono);font-size:9.5px;color:var(--dim);letter-spacing:.03em;text-transform:uppercase;margin-top:1px;}
+  .slot-btn{
+    background:var(--void);border:1px solid var(--line);color:var(--paper);width:26px;height:26px;
+    border-radius:50%;cursor:pointer;font-size:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    transition:border-color .15s,color .15s;
   }
-  .tv-close{
-    background:var(--void);border:1px solid var(--line);color:var(--paper);width:32px;height:32px;
-    border-radius:50%;cursor:pointer;font-size:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-    transition:border-color .15s;
-  }
-  .tv-close:hover{border-color:var(--onair);color:var(--onair);}
-  .tv-screen{position:relative;aspect-ratio:16/9;background:#000;}
-  .tv-screen video{width:100%;height:100%;display:block;background:#000;}
-  .tv-status{
+  .slot-btn:hover{border-color:var(--amber-dim);color:var(--amber);}
+  .slot-btn.audio-on{border-color:var(--amber);color:var(--amber);background:rgba(255,176,32,.1);}
+  .slot-btn.close-btn:hover{border-color:var(--onair);color:var(--onair);}
+  .slot-screen{position:relative;aspect-ratio:16/9;background:#000;cursor:pointer;}
+  .slot-screen video{width:100%;height:100%;display:block;background:#000;}
+  .slot-empty{
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:14px;text-align:center;padding:20px;
+    gap:6px;color:var(--dimmer);background:
+      repeating-linear-gradient(45deg,var(--void),var(--void) 10px,#0d1017 10px,#0d1017 20px);
   }
-  .tv-status canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:.5;}
-  .tv-status-text{position:relative;font-family:var(--font-mono);font-weight:600;font-size:13px;letter-spacing:.1em;color:var(--paper);text-shadow:0 2px 8px rgba(0,0,0,.8);}
-  .tv-status-sub{position:relative;font-size:12.5px;color:var(--dim);max-width:38ch;text-shadow:0 2px 8px rgba(0,0,0,.8);}
-  .tv-status-actions{position:relative;display:flex;gap:10px;}
-  .unmute-pill{
-    position:absolute;top:12px;left:12px;background:rgba(10,13,18,.75);border:1px solid var(--line);
-    color:var(--paper);padding:7px 13px;border-radius:999px;font-size:12px;cursor:pointer;z-index:2;
-    display:flex;align-items:center;gap:6px;
+  .slot-empty b{font-family:var(--font-display);font-size:13.5px;color:var(--dim);font-weight:600;}
+  .slot-empty span{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;}
+  .slot-status{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;text-align:center;padding:12px;
   }
-  .tv-foot{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-family:var(--font-mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.03em;}
+  .slot-status canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:.5;}
+  .slot-status-text{position:relative;font-family:var(--font-mono);font-weight:600;font-size:11px;letter-spacing:.08em;color:var(--paper);text-shadow:0 2px 8px rgba(0,0,0,.8);}
+  .slot-status-sub{position:relative;font-size:10.5px;color:var(--dim);max-width:26ch;text-shadow:0 2px 8px rgba(0,0,0,.8);}
+  .slot-status-actions{position:relative;display:flex;gap:8px;}
+  .slot-status .retry-btn{padding:7px 14px;font-size:11.5px;}
+  .sound-pill{
+    position:absolute;bottom:9px;left:9px;background:rgba(10,13,18,.8);border:1px solid var(--amber-dim);
+    color:var(--amber);padding:6px 11px;border-radius:999px;font-size:11px;cursor:pointer;z-index:2;
+  }
+
+  /* ---------- Target row ---------- */
+  .target-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:22px;}
+  .slot-pills{display:flex;gap:8px;}
+  .slot-pill{
+    background:var(--panel);border:1px solid var(--line);color:var(--dim);
+    padding:7px 13px;border-radius:999px;font-size:12px;cursor:pointer;font-family:var(--font-mono);
+    display:flex;align-items:center;gap:6px;transition:border-color .15s,color .15s;
+  }
+  .slot-pill:hover{border-color:var(--amber-dim);}
+  .slot-pill.active{border-color:var(--amber);color:var(--amber);background:rgba(255,176,32,.08);}
+  .slot-pill .p-name{color:var(--paper);max-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-body);}
 
   /* ---------- Footer ---------- */
   .credits{
@@ -287,7 +303,8 @@
 
   @media (max-width:700px){
     .browse-cards{grid-template-columns:1fr;}
-    .tv-sub{display:none;}
+    .wall{grid-template-columns:1fr;}
+    .slot-sub{display:none;}
     .search-wrap{order:3;flex-basis:100%;}
   }
   @media (prefers-reduced-motion:reduce){
@@ -300,10 +317,10 @@
 <div class="app">
   <header class="tuner-bar">
     <div class="brand">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V10M12 10L6 4M12 10l6-6M4 8a11 11 0 0 1 16 0" stroke="var(--amber)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="20" r="1.6" fill="var(--onair)"/></svg>
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.6" stroke="var(--amber)" stroke-width="1.6"/><rect x="13" y="3" width="8" height="8" rx="1.6" stroke="var(--amber)" stroke-width="1.6"/><rect x="3" y="13" width="8" height="8" rx="1.6" stroke="var(--amber)" stroke-width="1.6"/><rect x="13" y="13" width="8" height="8" rx="1.6" stroke="var(--onair)" stroke-width="1.6"/></svg>
       <div>
-        <span class="brand-name">Antenna</span>
-        <span class="brand-tag">Public signal browser</span>
+        <span class="brand-name">MultiBeam</span>
+        <span class="brand-tag">4-channel live wall · fork of Antenna</span>
       </div>
     </div>
     <div class="search-wrap">
@@ -313,12 +330,112 @@
     <div class="bar-actions">
       <span class="mono-readout" id="loadedCount">0 tuned</span>
       <button class="ghost-btn" id="loadAllBtn" type="button">Load all channels</button>
-      <a class="ghost-btn beam-btn" href="multibeam.html" title="Watch up to 4 channels at once">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="3" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="13" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="13" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.8"/></svg>
-        Try MultiBeam
-      </a>
     </div>
   </header>
+
+  <section class="wall" id="wall" aria-label="Video wall — up to 4 channels">
+    <!-- 4 static slots; content wired up by Slot instances in JS -->
+    <div class="slot" data-slot="0" id="slot-0">
+      <div class="slot-strip">
+        <span class="live-dot idle" id="liveDot-0"></span>
+        <span class="slot-num">1</span>
+        <div class="slot-info">
+          <div class="slot-name" id="slotName-0">Empty slot</div>
+          <div class="slot-sub" id="slotSub-0"></div>
+        </div>
+        <button class="slot-btn" id="audioBtn-0" type="button" aria-label="Make this slot's audio active" hidden>🔈</button>
+        <button class="slot-btn close-btn" id="closeBtn-0" type="button" aria-label="Clear this slot" hidden>✕</button>
+      </div>
+      <div class="slot-screen" id="slotScreen-0">
+        <video id="video-0" playsinline muted></video>
+        <button class="sound-pill" id="soundPill-0" type="button" hidden>🔈 Tap for sound</button>
+        <div class="slot-status" id="slotStatus-0" hidden>
+          <canvas id="staticCanvas-0" width="120" height="68"></canvas>
+          <div class="slot-status-text" id="statusText-0">TUNING IN…</div>
+          <div class="slot-status-sub" id="statusSub-0"></div>
+          <div class="slot-status-actions" id="statusActions-0"></div>
+        </div>
+        <div class="slot-empty" id="slotEmpty-0"><b>Slot 1</b><span>Tap to add a channel</span></div>
+      </div>
+    </div>
+
+    <div class="slot" data-slot="1" id="slot-1">
+      <div class="slot-strip">
+        <span class="live-dot idle" id="liveDot-1"></span>
+        <span class="slot-num">2</span>
+        <div class="slot-info">
+          <div class="slot-name" id="slotName-1">Empty slot</div>
+          <div class="slot-sub" id="slotSub-1"></div>
+        </div>
+        <button class="slot-btn" id="audioBtn-1" type="button" aria-label="Make this slot's audio active" hidden>🔈</button>
+        <button class="slot-btn close-btn" id="closeBtn-1" type="button" aria-label="Clear this slot" hidden>✕</button>
+      </div>
+      <div class="slot-screen" id="slotScreen-1">
+        <video id="video-1" playsinline muted></video>
+        <button class="sound-pill" id="soundPill-1" type="button" hidden>🔈 Tap for sound</button>
+        <div class="slot-status" id="slotStatus-1" hidden>
+          <canvas id="staticCanvas-1" width="120" height="68"></canvas>
+          <div class="slot-status-text" id="statusText-1">TUNING IN…</div>
+          <div class="slot-status-sub" id="statusSub-1"></div>
+          <div class="slot-status-actions" id="statusActions-1"></div>
+        </div>
+        <div class="slot-empty" id="slotEmpty-1"><b>Slot 2</b><span>Tap to add a channel</span></div>
+      </div>
+    </div>
+
+    <div class="slot" data-slot="2" id="slot-2">
+      <div class="slot-strip">
+        <span class="live-dot idle" id="liveDot-2"></span>
+        <span class="slot-num">3</span>
+        <div class="slot-info">
+          <div class="slot-name" id="slotName-2">Empty slot</div>
+          <div class="slot-sub" id="slotSub-2"></div>
+        </div>
+        <button class="slot-btn" id="audioBtn-2" type="button" aria-label="Make this slot's audio active" hidden>🔈</button>
+        <button class="slot-btn close-btn" id="closeBtn-2" type="button" aria-label="Clear this slot" hidden>✕</button>
+      </div>
+      <div class="slot-screen" id="slotScreen-2">
+        <video id="video-2" playsinline muted></video>
+        <button class="sound-pill" id="soundPill-2" type="button" hidden>🔈 Tap for sound</button>
+        <div class="slot-status" id="slotStatus-2" hidden>
+          <canvas id="staticCanvas-2" width="120" height="68"></canvas>
+          <div class="slot-status-text" id="statusText-2">TUNING IN…</div>
+          <div class="slot-status-sub" id="statusSub-2"></div>
+          <div class="slot-status-actions" id="statusActions-2"></div>
+        </div>
+        <div class="slot-empty" id="slotEmpty-2"><b>Slot 3</b><span>Tap to add a channel</span></div>
+      </div>
+    </div>
+
+    <div class="slot" data-slot="3" id="slot-3">
+      <div class="slot-strip">
+        <span class="live-dot idle" id="liveDot-3"></span>
+        <span class="slot-num">4</span>
+        <div class="slot-info">
+          <div class="slot-name" id="slotName-3">Empty slot</div>
+          <div class="slot-sub" id="slotSub-3"></div>
+        </div>
+        <button class="slot-btn" id="audioBtn-3" type="button" aria-label="Make this slot's audio active" hidden>🔈</button>
+        <button class="slot-btn close-btn" id="closeBtn-3" type="button" aria-label="Clear this slot" hidden>✕</button>
+      </div>
+      <div class="slot-screen" id="slotScreen-3">
+        <video id="video-3" playsinline muted></video>
+        <button class="sound-pill" id="soundPill-3" type="button" hidden>🔈 Tap for sound</button>
+        <div class="slot-status" id="slotStatus-3" hidden>
+          <canvas id="staticCanvas-3" width="120" height="68"></canvas>
+          <div class="slot-status-text" id="statusText-3">TUNING IN…</div>
+          <div class="slot-status-sub" id="statusSub-3"></div>
+          <div class="slot-status-actions" id="statusActions-3"></div>
+        </div>
+        <div class="slot-empty" id="slotEmpty-3"><b>Slot 4</b><span>Tap to add a channel</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="target-row">
+    <span class="section-label" style="margin:0;"><span class="dot"></span>Adding to</span>
+    <div class="slot-pills" id="slotPills"></div>
+  </div>
 
   <nav class="scope-tabs" id="scopeTabs">
     <button class="tab active" data-tab="home" type="button">Home</button>
@@ -332,40 +449,13 @@
 </div>
 
 <footer class="credits">
+  MultiBeam is an open-source fork of Antenna, built to run up to four channels at once.<br>
   Channel data &amp; stream links come from the <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener">iptv-org/iptv</a> project (Unlicense) — nothing is hosted or stored here.<br>
-  Public streams can go offline, move, or get geo-blocked without notice. If one won't tune in, the next one probably will.
+  Public streams can go offline, move, or get geo-blocked without notice, and four at once asks more of your connection than one does.
 </footer>
 
-<div class="player-overlay" id="playerOverlay" hidden role="dialog" aria-modal="true" aria-label="Now playing">
-  <div class="tv" id="tv">
-    <div class="tv-strip">
-      <span class="live-dot" id="liveDot"></span>
-      <div class="tv-info">
-        <div class="tv-name" id="tvName">—</div>
-        <div class="tv-sub" id="tvSub"></div>
-      </div>
-      <select class="qsel" id="qualitySelect" hidden></select>
-      <button class="fav-btn" id="tvFav" type="button" aria-label="Save to favorites" style="position:static;background:var(--void);">☆</button>
-      <button class="tv-close" id="tvClose" type="button" aria-label="Close player">✕</button>
-    </div>
-    <div class="tv-screen">
-      <video id="video" playsinline muted controls></video>
-      <button class="unmute-pill" id="unmuteBtn" type="button" hidden>🔈 Tap to unmute</button>
-      <div class="tv-status" id="tvStatus">
-        <canvas id="staticCanvas" width="160" height="90"></canvas>
-        <div class="tv-status-text" id="statusText">TUNING IN…</div>
-        <div class="tv-status-sub" id="statusSub"></div>
-        <div class="tv-status-actions" id="statusActions"></div>
-      </div>
-    </div>
-    <div class="tv-foot">
-      <span id="tvKeyHint">↑ / ↓ change channel · Esc close</span>
-      <span id="tvUrlHint"></span>
-    </div>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+
 <script>
 (function(){
 "use strict";
@@ -560,11 +650,8 @@ const state = {
   renderLimit: 120,
   allChannels: null,      // cache for "load all"
   favorites: [],          // array of channel objects
-  nowPlaying: null,
-  hls: null,
-  playTimeout: null,
-  staticTimer: null,
-  recoveredOnce: false
+  targetSlot: 0,          // which of the 4 slots a picked channel goes into
+  audioSlot: null         // which slot (if any) currently has unmuted audio
 };
 
 const $ = sel => document.querySelector(sel);
@@ -836,9 +923,8 @@ async function toggleFavorite(ch){
   const idx = state.favorites.findIndex(f => channelKey(f) === key);
   if (idx >= 0) state.favorites.splice(idx,1);
   else state.favorites.push(ch);
-  await Store.set("antenna:favorites", state.favorites);
+  await Store.set("multibeam:favorites", state.favorites);
   render();
-  if (state.nowPlaying && channelKey(state.nowPlaying) === key) syncPlayerFav();
 }
 
 function isFavorite(ch){
@@ -848,241 +934,297 @@ function isFavorite(ch){
 }
 
 /* =========================================================
-   PLAYER
+   PLAYER — up to 4 independent slots, each with its own
+   hls.js instance, buffering, and error handling. Only one
+   slot's audio plays at a time; the rest stay muted.
    ========================================================= */
-const overlay = $("#playerOverlay");
-const tv = $("#tv");
-const video = $("#video");
-const tvStatus = $("#tvStatus");
-const statusText = $("#statusText");
-const statusSub = $("#statusSub");
-const statusActions = $("#statusActions");
-const staticCanvas = $("#staticCanvas");
-const staticCtx = staticCanvas.getContext("2d");
-const unmuteBtn = $("#unmuteBtn");
-const qualitySelect = $("#qualitySelect");
-const tvFav = $("#tvFav");
-
-function drawStatic(){
-  const w = staticCanvas.width, h = staticCanvas.height;
-  const img = staticCtx.createImageData(w,h);
-  const buf = img.data;
-  for (let i=0;i<buf.length;i+=4){
-    const v = (Math.random()*255)|0;
-    buf[i]=v; buf[i+1]=v; buf[i+2]=v; buf[i+3]=255;
-  }
-  staticCtx.putImageData(img,0,0);
-}
-
-function startStatic(){
-  stopStatic();
-  drawStatic();
-  if (!reducedMotion) state.staticTimer = setInterval(drawStatic, 90);
-}
-function stopStatic(){
-  if (state.staticTimer){ clearInterval(state.staticTimer); state.staticTimer = null; }
-}
-
-function showStatus(kind, sub, actions){
-  tvStatus.style.display = "flex";
-  statusText.textContent = kind === "error" ? "NO SIGNAL" : "TUNING IN…";
-  statusSub.textContent = sub || "";
-  statusActions.innerHTML = actions || "";
-  startStatic();
-}
-function hideStatus(){
-  tvStatus.style.display = "none";
-  stopStatic();
-}
-
-/* How long to let each channel buffer ahead before playback starts, and the
-   hard ceiling on that wait so a slow source doesn't stall the app forever. */
 const PREBUFFER_SECONDS = 4;
 const PREBUFFER_MAX_WAIT_MS = 9000;
-const WATCHDOG_MS = 22000; // manifest load + prebuffer, generously bounded
+const WATCHDOG_MS = 22000;
+const SLOT_COUNT = 4;
 
-function destroyHls(){
-  if (state.hls){ try{ state.hls.destroy(); }catch(e){} state.hls = null; }
-  if (state.playTimeout){ clearTimeout(state.playTimeout); state.playTimeout = null; }
-  if (state.bufferPoll){ clearInterval(state.bufferPoll); state.bufferPoll = null; }
-  video.removeAttribute("src");
-  try{ video.load(); }catch(e){}
-}
+class Slot {
+  constructor(index){
+    this.index = index;
+    this.channel = null;
+    this.hls = null;
+    this.bufferPoll = null;
+    this.playTimeout = null;
+    this.recoveredOnce = false;
+    this.staticTimer = null;
 
-function bufferedAheadSeconds(){
-  if (!video.buffered || video.buffered.length === 0) return 0;
-  try{
-    const end = video.buffered.end(video.buffered.length - 1);
-    return Math.max(0, end - video.currentTime);
-  }catch(e){ return 0; }
-}
+    this.root = $(`#slot-${index}`);
+    this.video = $(`#video-${index}`);
+    this.screen = $(`#slotScreen-${index}`);
+    this.empty = $(`#slotEmpty-${index}`);
+    this.status = $(`#slotStatus-${index}`);
+    this.statusText = $(`#statusText-${index}`);
+    this.statusSub = $(`#statusSub-${index}`);
+    this.statusActions = $(`#statusActions-${index}`);
+    this.canvas = $(`#staticCanvas-${index}`);
+    this.ctx = this.canvas.getContext("2d");
+    this.soundPill = $(`#soundPill-${index}`);
+    this.liveDot = $(`#liveDot-${index}`);
+    this.nameEl = $(`#slotName-${index}`);
+    this.subEl = $(`#slotSub-${index}`);
+    this.audioBtn = $(`#audioBtn-${index}`);
+    this.closeBtn = $(`#closeBtn-${index}`);
 
-/* Hold playback paused-but-loading until a few seconds are buffered ahead,
-   so playback starts smooth instead of immediately stalling to rebuffer. */
-function beginPrebuffer(){
-  if (state.bufferPoll) return; // already buffering for this load
-  const startedAt = Date.now();
-  showStatus("tuning", "Buffering a few seconds ahead so it won't stutter…");
-  state.bufferPoll = setInterval(() => {
-    const ahead = bufferedAheadSeconds();
-    const elapsed = Date.now() - startedAt;
-    updateBufferProgress(ahead);
-    if (ahead >= PREBUFFER_SECONDS || elapsed >= PREBUFFER_MAX_WAIT_MS){
-      clearInterval(state.bufferPoll);
-      state.bufferPoll = null;
-      video.play().catch(() => {});
-    }
-  }, 200);
-}
-
-function updateBufferProgress(ahead){
-  const shown = Math.min(ahead, PREBUFFER_SECONDS).toFixed(1);
-  statusText.textContent = "BUFFERING…";
-  statusSub.textContent = `Loaded ${shown}s / ${PREBUFFER_SECONDS}s ahead`;
-}
-
-function reasonFor(data){
-  if (window.Hls && data){
-    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) return "The stream didn't respond — it may be offline, geo-restricted, or blocked by cross-origin rules.";
-    if (data.type === Hls.ErrorTypes.MEDIA_ERROR) return "Your browser couldn't decode this stream.";
-  }
-  return "This channel is off the air right now.";
-}
-
-function openPlayer(ch){
-  state.nowPlaying = ch;
-  overlay.hidden = false;
-  document.body.style.overflow = "hidden";
-  $("#tvName").textContent = ch.name;
-  const flag = ch.country ? (COUNTRY_MAP.get(ch.country.toLowerCase())||[null,null,""])[2] : (countryFromId(ch.id)||[null,null,""])[2];
-  $("#tvSub").textContent = [flag, ch.group || "General"].filter(Boolean).join("  ·  ");
-  try{ $("#tvUrlHint").textContent = new URL(ch.url, location.href).hostname; }catch(e){ $("#tvUrlHint").textContent = ""; }
-  syncPlayerFav();
-  qualitySelect.hidden = true;
-  qualitySelect.innerHTML = "";
-  unmuteBtn.hidden = true;
-  playChannel(ch);
-}
-
-function syncPlayerFav(){
-  const fav = isFavorite(state.nowPlaying);
-  tvFav.textContent = fav ? "★" : "☆";
-  tvFav.classList.toggle("active", fav);
-  tvFav.setAttribute("aria-label", fav ? "Remove from favorites" : "Save to favorites");
-}
-
-function closePlayer(){
-  overlay.hidden = true;
-  document.body.style.overflow = "";
-  destroyHls();
-  video.pause();
-  state.nowPlaying = null;
-  stopStatic();
-}
-
-function playChannel(ch){
-  destroyHls();
-  state.recoveredOnce = false;
-  showStatus("tuning", "Connecting to the source…");
-  if (!reducedMotion) tv.classList.add("flicker");
-  setTimeout(() => tv.classList.remove("flicker"), 200);
-
-  // Stay paused-but-loading until playback actually starts — beginPrebuffer()
-  // is what calls video.play() once enough is buffered.
-  video.muted = true;
-  video.autoplay = false;
-  video.pause();
-
-  const onPlaying = () => {
-    hideStatus();
-    if (state.playTimeout){ clearTimeout(state.playTimeout); state.playTimeout = null; }
-    if (state.bufferPoll){ clearInterval(state.bufferPoll); state.bufferPoll = null; }
-    if (video.muted) unmuteBtn.hidden = false;
-  };
-  video.addEventListener("playing", onPlaying, { once:true });
-  video.addEventListener("error", () => {
-    if (state.bufferPoll){ clearInterval(state.bufferPoll); state.bufferPoll = null; }
-    showStatus("error", reasonFor(null), retryActions());
-  }, { once:true });
-
-  if (window.Hls && Hls.isSupported()){
-    const hls = new Hls({
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
-      backBufferLength: 30,
-      liveSyncDurationCount: 4,
-      liveMaxLatencyDurationCount: 10,
-      maxBufferHole: 0.5,
-      enableWorker: true
+    this.screen.addEventListener("click", (e) => {
+      if (e.target.closest(".sound-pill")) return;
+      setTargetSlot(this.index);
+      if (!this.channel) scrollToBrowse();
     });
-    state.hls = hls;
-    hls.on(Hls.Events.MANIFEST_PARSED, (evt, data) => { populateQuality(data.levels); beginPrebuffer(); });
-    hls.on(Hls.Events.ERROR, (evt, data) => {
-      if (!data.fatal) return;
-      if (!state.recoveredOnce && (data.type === Hls.ErrorTypes.NETWORK_ERROR || data.type === Hls.ErrorTypes.MEDIA_ERROR)){
-        state.recoveredOnce = true;
-        try{
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-          else hls.recoverMediaError();
-          return;
-        }catch(e){ /* fall through to error UI */ }
+    this.audioBtn.addEventListener("click", (e) => { e.stopPropagation(); setAudioSlot(this.index); });
+    this.closeBtn.addEventListener("click", (e) => { e.stopPropagation(); this.clear(); renderSlotPills(); });
+    this.soundPill.addEventListener("click", (e) => { e.stopPropagation(); setAudioSlot(this.index); });
+    this.status.addEventListener("click", (e) => {
+      if (e.target.id === `statusRetry-${this.index}` && this.channel) this.load(this.channel);
+    });
+    this.video.addEventListener("volumechange", () => {
+      if (!this.video.muted) this.soundPill.hidden = true;
+    });
+  }
+
+  drawStatic(){
+    const w = this.canvas.width, h = this.canvas.height;
+    const img = this.ctx.createImageData(w,h);
+    const buf = img.data;
+    for (let i=0;i<buf.length;i+=4){
+      const v = (Math.random()*255)|0;
+      buf[i]=v; buf[i+1]=v; buf[i+2]=v; buf[i+3]=255;
+    }
+    this.ctx.putImageData(img,0,0);
+  }
+  startStatic(){
+    this.stopStatic();
+    this.drawStatic();
+    if (!reducedMotion) this.staticTimer = setInterval(() => this.drawStatic(), 90);
+  }
+  stopStatic(){
+    if (this.staticTimer){ clearInterval(this.staticTimer); this.staticTimer = null; }
+  }
+
+  showStatus(kind, sub, actions){
+    this.status.hidden = false;
+    this.statusText.textContent = kind === "error" ? "NO SIGNAL" : "TUNING IN…";
+    this.statusSub.textContent = sub || "";
+    this.statusActions.innerHTML = actions || "";
+    this.startStatic();
+  }
+  hideStatus(){
+    this.status.hidden = true;
+    this.stopStatic();
+  }
+
+  bufferedAheadSeconds(){
+    const v = this.video;
+    if (!v.buffered || v.buffered.length === 0) return 0;
+    try{ return Math.max(0, v.buffered.end(v.buffered.length - 1) - v.currentTime); }
+    catch(e){ return 0; }
+  }
+
+  beginPrebuffer(){
+    if (this.bufferPoll) return;
+    const startedAt = Date.now();
+    this.showStatus("tuning", "Buffering a few seconds ahead…");
+    this.bufferPoll = setInterval(() => {
+      const ahead = this.bufferedAheadSeconds();
+      const elapsed = Date.now() - startedAt;
+      const shown = Math.min(ahead, PREBUFFER_SECONDS).toFixed(1);
+      this.statusText.textContent = "BUFFERING…";
+      this.statusSub.textContent = `${shown}s / ${PREBUFFER_SECONDS}s`;
+      if (ahead >= PREBUFFER_SECONDS || elapsed >= PREBUFFER_MAX_WAIT_MS){
+        clearInterval(this.bufferPoll);
+        this.bufferPoll = null;
+        this.video.play().catch(() => {});
       }
-      if (state.bufferPoll){ clearInterval(state.bufferPoll); state.bufferPoll = null; }
-      showStatus("error", reasonFor(data), retryActions());
-    });
-    hls.loadSource(ch.url);
-    hls.attachMedia(video);
-  } else if (video.canPlayType("application/vnd.apple.mpegurl")){
-    video.preload = "auto";
-    video.src = ch.url;
-    video.addEventListener("loadedmetadata", beginPrebuffer, { once:true });
-  } else {
-    video.preload = "auto";
-    video.src = ch.url;
-    video.addEventListener("loadedmetadata", beginPrebuffer, { once:true });
+    }, 200);
   }
 
-  state.playTimeout = setTimeout(() => {
-    if (tvStatus.style.display !== "none"){
-      if (state.bufferPoll){ clearInterval(state.bufferPoll); state.bufferPoll = null; }
-      showStatus("error", "This channel is taking too long to respond.", retryActions());
+  reasonFor(data){
+    if (window.Hls && data){
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) return "Didn't respond — offline, geo-restricted, or blocked by cross-origin rules.";
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR) return "Your browser couldn't decode this stream.";
     }
-  }, WATCHDOG_MS);
+    return "This channel is off the air right now.";
+  }
+
+  retryActions(){
+    return `<button class="retry-btn" id="statusRetry-${this.index}" type="button">Try again</button>`;
+  }
+
+  stopPlayback(){
+    if (this.hls){ try{ this.hls.destroy(); }catch(e){} this.hls = null; }
+    if (this.playTimeout){ clearTimeout(this.playTimeout); this.playTimeout = null; }
+    if (this.bufferPoll){ clearInterval(this.bufferPoll); this.bufferPoll = null; }
+    this.video.removeAttribute("src");
+    try{ this.video.load(); }catch(e){}
+    this.stopStatic();
+  }
+
+  load(ch){
+    this.stopPlayback();
+    this.channel = ch;
+    this.recoveredOnce = false;
+
+    this.empty.hidden = true;
+    this.audioBtn.hidden = false;
+    this.closeBtn.hidden = false;
+    this.soundPill.hidden = true;
+    this.nameEl.textContent = ch.name;
+    const flag = ch.country ? (COUNTRY_MAP.get(ch.country.toLowerCase())||[null,null,""])[2] : (countryFromId(ch.id)||[null,null,""])[2];
+    this.subEl.textContent = [flag, ch.group || "General"].filter(Boolean).join(" · ");
+    this.liveDot.classList.remove("idle");
+    if (!reducedMotion){ this.root.classList.add("flicker"); setTimeout(() => this.root.classList.remove("flicker"), 200); }
+
+    const video = this.video;
+    // Always start muted so autoplay is never blocked by the browser — the
+    // real mute state for the audio-active slot is applied once playback
+    // actually starts (see onPlaying below), which is a safe time to toggle
+    // mute on media that's already autoplaying.
+    video.muted = true;
+
+    this.showStatus("tuning", "Connecting to the source…");
+
+    const onPlaying = () => {
+      this.hideStatus();
+      if (this.playTimeout){ clearTimeout(this.playTimeout); this.playTimeout = null; }
+      if (this.bufferPoll){ clearInterval(this.bufferPoll); this.bufferPoll = null; }
+      video.muted = (state.audioSlot !== this.index);
+      this.syncAudioUI();
+      this.soundPill.hidden = !video.muted;
+    };
+    video.addEventListener("playing", onPlaying, { once:true });
+    video.addEventListener("error", () => {
+      if (this.bufferPoll){ clearInterval(this.bufferPoll); this.bufferPoll = null; }
+      this.showStatus("error", this.reasonFor(null), this.retryActions());
+    }, { once:true });
+
+    if (window.Hls && Hls.isSupported()){
+      const hls = new Hls({
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        backBufferLength: 30,
+        liveSyncDurationCount: 4,
+        liveMaxLatencyDurationCount: 10,
+        maxBufferHole: 0.5,
+        enableWorker: true
+      });
+      this.hls = hls;
+      hls.on(Hls.Events.ERROR, (evt, data) => {
+        if (!data.fatal) return;
+        if (!this.recoveredOnce && (data.type === Hls.ErrorTypes.NETWORK_ERROR || data.type === Hls.ErrorTypes.MEDIA_ERROR)){
+          this.recoveredOnce = true;
+          try{
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+            else hls.recoverMediaError();
+            return;
+          }catch(e){ /* fall through */ }
+        }
+        if (this.bufferPoll){ clearInterval(this.bufferPoll); this.bufferPoll = null; }
+        this.showStatus("error", this.reasonFor(data), this.retryActions());
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => this.beginPrebuffer());
+      hls.loadSource(ch.url);
+      hls.attachMedia(video);
+    } else {
+      video.preload = "auto";
+      video.src = ch.url;
+      video.addEventListener("loadedmetadata", () => this.beginPrebuffer(), { once:true });
+    }
+
+    this.playTimeout = setTimeout(() => {
+      if (!this.status.hidden){
+        if (this.bufferPoll){ clearInterval(this.bufferPoll); this.bufferPoll = null; }
+        this.showStatus("error", "Taking too long to respond.", this.retryActions());
+      }
+    }, WATCHDOG_MS);
+  }
+
+  clear(){
+    this.stopPlayback();
+    this.channel = null;
+    this.hideStatus();
+    this.empty.hidden = false;
+    this.audioBtn.hidden = true;
+    this.closeBtn.hidden = true;
+    this.soundPill.hidden = true;
+    this.audioBtn.classList.remove("audio-on");
+    this.nameEl.textContent = "Empty slot";
+    this.subEl.textContent = "";
+    this.liveDot.classList.add("idle");
+    if (state.audioSlot === this.index) state.audioSlot = null;
+    if (state.targetSlot === null) state.targetSlot = this.index;
+  }
+
+  syncAudioUI(){
+    const active = state.audioSlot === this.index;
+    this.audioBtn.classList.toggle("audio-on", active);
+    this.audioBtn.textContent = active ? "🔊" : "🔈";
+    this.audioBtn.setAttribute("aria-label", active ? "Audio is active on this slot" : "Make this slot's audio active");
+    if (active) this.soundPill.hidden = true;
+  }
 }
 
-function retryActions(){
-  return `<button class="retry-btn" id="statusRetry" type="button">Try again</button>`;
+const slots = Array.from({ length: SLOT_COUNT }, (_, i) => new Slot(i));
+
+function setAudioSlot(i){
+  state.audioSlot = i;
+  slots.forEach(s => {
+    // Only touch mute directly on media that's already playing — toggling
+    // mute on active media is always allowed. For a slot still loading,
+    // its own onPlaying handler applies the right mute state once it starts.
+    if (!s.video.paused) s.video.muted = (s.index !== i);
+    s.syncAudioUI();
+  });
 }
 
-function populateQuality(levels){
-  if (!levels || levels.length < 2){ qualitySelect.hidden = true; return; }
-  qualitySelect.hidden = false;
-  qualitySelect.innerHTML = `<option value="-1">Auto</option>` + levels.map((lv,i) => `<option value="${i}">${lv.height ? lv.height+"p" : "Level "+i}</option>`).join("");
-  qualitySelect.onchange = () => { if (state.hls) state.hls.currentLevel = parseInt(qualitySelect.value,10); };
+function setTargetSlot(i){
+  state.targetSlot = i;
+  slots.forEach(s => s.root.classList.toggle("is-target", s.index === i));
+  renderSlotPills();
 }
 
-/* Delegate clicks inside the status layer (retry button re-renders each time) */
-tvStatus.addEventListener("click", (e) => {
-  if (e.target.id === "statusRetry" && state.nowPlaying) playChannel(state.nowPlaying);
+function firstEmptySlotIndex(){
+  const idx = slots.findIndex(s => !s.channel);
+  return idx === -1 ? null : idx;
+}
+
+function scrollToBrowse(){
+  const tabs = $("#scopeTabs");
+  if (tabs) tabs.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+}
+
+function assignChannelToTarget(ch){
+  let target = state.targetSlot;
+  if (target === null || target === undefined) target = firstEmptySlotIndex();
+  if (target === null) target = 0; // all full — replace slot 1 rather than silently do nothing
+  slots[target].load(ch);
+  if (state.audioSlot === null) setAudioSlot(target);
+  const nextEmpty = firstEmptySlotIndex();
+  setTargetSlot(nextEmpty === null ? target : nextEmpty);
+}
+
+function renderSlotPills(){
+  const rail = $("#slotPills");
+  if (!rail) return;
+  rail.innerHTML = slots.map(s => `
+    <button class="slot-pill ${state.targetSlot === s.index ? "active" : ""}" data-target="${s.index}" type="button">
+      ${s.index + 1}${s.channel ? `<span class="p-name">${esc(s.channel.name)}</span>` : ""}
+    </button>
+  `).join("");
+}
+
+$("#slotPills").addEventListener("click", (e) => {
+  const btn = e.target.closest(".slot-pill");
+  if (btn) setTargetSlot(parseInt(btn.dataset.target,10));
 });
 
-unmuteBtn.addEventListener("click", () => { video.muted = false; unmuteBtn.hidden = true; });
-video.addEventListener("volumechange", () => { if (!video.muted) unmuteBtn.hidden = true; });
-
-$("#tvClose").addEventListener("click", closePlayer);
-overlay.addEventListener("click", (e) => { if (e.target === overlay) closePlayer(); });
-tvFav.addEventListener("click", () => { if (state.nowPlaying) toggleFavorite(state.nowPlaying); });
-
 document.addEventListener("keydown", (e) => {
-  if (overlay.hidden) return;
-  if (e.key === "Escape") closePlayer();
-  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && state.gridSource && state.gridSource.length){
-    e.preventDefault();
-    const key = channelKey(state.nowPlaying);
-    let idx = state.gridSource.findIndex(c => channelKey(c) === key);
-    if (idx === -1) idx = 0;
-    idx = e.key === "ArrowDown" ? (idx+1) % state.gridSource.length : (idx-1+state.gridSource.length) % state.gridSource.length;
-    openPlayer(state.gridSource[idx]);
+  if (document.activeElement === searchInput) return;
+  if (e.key >= "1" && e.key <= "4"){
+    setTargetSlot(parseInt(e.key,10) - 1);
   }
 });
 
@@ -1099,7 +1241,7 @@ main.addEventListener("click", (e) => {
   const card = e.target.closest(".card");
   if (card){
     const ch = state.gridSource[parseInt(card.dataset.uid,10)];
-    if (ch) openPlayer(ch);
+    if (ch) assignChannelToTarget(ch);
     return;
   }
   const chip = e.target.closest(".chip");
@@ -1134,12 +1276,13 @@ loadAllBtn.addEventListener("click", () => {
   if (state.view !== "results") state.returnView = state.view;
   loadScope("all", null, "All Channels — Global Index", "🌐");
 });
-
 /* =========================================================
    INIT
    ========================================================= */
 (async function init(){
-  state.favorites = await Store.get("antenna:favorites", []);
+  state.favorites = await Store.get("multibeam:favorites", []);
+  renderSlotPills();
+  setTargetSlot(0);
   render();
 })();
 
